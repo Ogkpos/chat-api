@@ -35,7 +35,7 @@ chat-api
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/your-username/chat-app.git
+git clone https://github.com/Ogkpos/chat-api.git
 ```
 
 ### 2. Install Dependencies

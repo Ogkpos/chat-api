@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Socket.io Chat Test</title>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+  </head>
+  <body>
+    <h1>Chat Test</h1>
+
+    <label>
+      <input type="radio" name="chatType" value="DIRECT" checked />Direct Chat
+    </label>
+    <label>
+      <input type="radio" name="chatType" value="GROUP" />Group Chat
+    </label>
+
+    <input
+      type="text"
+      id="chatTarget"
+      placeholder="Enter User ID or Group ID"
+    />
+
+    <h2>Messages</h2>
+    <input type="text" id="messageInput" placeholder="Type a message..." />
+    <button onclick="sendMessage()">Send</button>
+
+    <ul id="messages"></ul>
+
+    <h2>Create a Group</h2>
+    <input type="text" id="groupName" placeholder="Group Name" />
+    <input
+      type="text"
+      id="groupParticipants"
+      placeholder="User IDs (comma separated)"
+    />
+    <button onclick="createGroupChat()">Create Group</button>
+
+    <script>
+      const socket = io("http://localhost:3000"); // Connect to WebSocket server
+
+      const senderId = "2506aa03-978b-4aa7-8c24-6bf6b0431e9c";
+      // const receiverId = "04d268fc-cccd-4c74-bb6d-b216a98ace07";
+
+      // Join all conversation of this user
+      socket.emit("joinConversations", senderId);
+      document.querySelectorAll('input[name="chatType"]').forEach((radio) => {
+        radio.addEventListener("change", function () {
+          console.log("Chat type changed to:", this.value);
+        });
+      });
+
+      function sendMessage() {
+        const input = document.getElementById("messageInput");
+        const chatTarget = document.getElementById("chatTarget").value;
+        const message = input.value;
+        const chatType = document.querySelector(
+          'input[name="chatType"]:checked'
+        ).value;
+
+        if (!chatTarget) {
+          alert("Please enter a User ID or Group ID.");
+          return;
+        }
+
+        console.log("Sending message with:", {
+          senderId,
+          chatTarget,
+          message,
+          chatType,
+        });
+        // Differentiate between DIRECT and GROUP chat
+        if (chatType === "DIRECT") {
+          console.log("📢 Sending Direct Message...");
+          socket.emit("sendMessage", {
+            senderId,
+            receiverId: chatTarget, // This is the receiver's user ID
+            content: message,
+            type: "DIRECT",
+          });
+        } else if (chatType === "GROUP") {
+          console.log("📢 Sending Group Message...");
+          socket.emit("sendMessage", {
+            senderId,
+            conversationId: chatTarget, // This is the group ID
+            content: message,
+            type: "GROUP",
+          });
+        }
+
+        input.value = "";
+        console.log("Creating conversation with:", {
+          senderId,
+          chatTarget,
+        });
+        console.log("📌 Current Chat Target:", chatTarget);
+      }
+
+      //create a new group chat
+      function createGroupChat() {
+        const groupName = document.getElementById("groupName").value;
+        const participantIds = document
+          .getElementById("groupParticipants")
+          .value.split(",")
+          .map((id) => id.trim())
+          .filter((id) => id.length > 0);
+
+        console.log("Participants", participantIds);
+
+        if (!groupName || participantIds.length < 2) {
+          alert("Please enter a group name and at least 2 participants.");
+          return;
+        }
+
+        socket.emit(
+          "createGroupChat",
+          {
+            creatorId: senderId,
+            name: groupName,
+            participantIds,
+          },
+          (response) => {
+            if (response.error) {
+              alert("Error: " + response.error);
+              return;
+            }
+            const groupId = response.conversationId;
+            currentGroupId = groupId;
+            alert(`Group "${groupName}" created! Group ID: ${groupId}`);
+          }
+        );
+      }
+      // Listen for new messages
+      socket.on("newMessage", (message) => {
+        console.log("Received message:", message); // Debugging
+        if (!message.type) {
+          console.error("⚠️ Message type is missing!", message);
+        }
+        displayMessage(message);
+      });
+
+      function displayMessage(message) {
+        const list = document.getElementById("messages");
+        const item = document.createElement("li");
+
+        console.log("📩 Received message:", message);
+        const senderName =
+          message.sender?.username || message.senderId || "Unknown";
+        const messageContent = message.content || "[No Content]";
+        const chatType = message.type || "UNKNOWN"; // Prevent undefined issues
+        if (chatType === "DIRECT") {
+          item.textContent = `🗨️ ${senderName} ➝ ${messageContent}`;
+        } else if (chatType === "GROUP") {
+          item.textContent = `👥 ${senderName} (Group Chat) ➝ ${messageContent}`;
+        } else {
+          item.textContent = `❓ ${senderName}: ${messageContent} (Unknown Type)`;
+        }
+        list.appendChild(item);
+      }
+    </script>
+  </body>
+</html>

@@ -1,0 +1,90 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum FriendRequestStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+}
+
+enum ConversationType {
+  DIRECT
+  GROUP
+}
+
+model User {
+  id               String                    @id @default(uuid())
+  email            String                    @unique
+  password         String
+  username         String                    @unique
+  friendship1      Friends[]                 @relation("User1")
+  friendship2      Friends[]                 @relation("User2")
+  sentRequests     FriendRequest[]           @relation("Sender")
+  receivedRequests FriendRequest[]           @relation("Receiver")
+  conversations    ConversationParticipant[]
+
+  sentMessages     Message[] @relation("SentMessages")
+  receivedMessages Message[] @relation("ReceivedMessages")
+}
+
+model FriendRequest {
+  id         String              @id @default(uuid())
+  receiverId String
+  senderId   String
+  status     FriendRequestStatus @default(PENDING)
+  createdAt  DateTime            @default(now())
+  sender     User                @relation("Sender", fields: [senderId], references: [id])
+  receiver   User                @relation("Receiver", fields: [receiverId], references: [id])
+}
+
+model Friends {
+  id      String @id @default(uuid())
+  userId1 String
+  userId2 String
+  user1   User   @relation("User1", fields: [userId1], references: [id])
+  user2   User   @relation("User2", fields: [userId2], references: [id])
+
+  @@unique([userId1, userId2])
+}
+
+model ConversationParticipant {
+  id             String       @id @default(uuid())
+  userId         String
+  conversationId String
+  user           User         @relation(fields: [userId], references: [id])
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+
+  @@unique([userId, conversationId])
+}
+
+model Conversation {
+  id           String                    @id @default(uuid())
+  type         ConversationType          @default(DIRECT)
+  name         String?
+  participants ConversationParticipant[]
+  createdAt    DateTime                  @default(now())
+  messages     Message[]
+}
+
+model Message {
+  id             String       @id @default(uuid())
+  content        String
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  senderId       String
+  sender         User         @relation("SentMessages", fields: [senderId], references: [id])
+  receiverId     String?
+  receiver       User?        @relation("ReceivedMessages", fields: [receiverId], references: [id])
+}

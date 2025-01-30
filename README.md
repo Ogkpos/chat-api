@@ -73,16 +73,19 @@ npm run dev
 
 ### 6. Open the Client
 
-Simply open `public/index.html` in a browser to test chat functionality.
+Simply run  `public/index.html` on port 3000 in a browser to test chat functionality, you can use http-server -p 3000.
+
+NB:You must enter your userId to perform any operation.
 
 ## WebSocket Events
 
 ### Server-Side Events
 
-- **sendMessage**: Sends a message (direct or group)
+- **sendMessage**: Sends a message(text/images/files) to (direct or group chats)
 - **newMessage**: Broadcasts a new message to connected users
 - **joinConversations**: Joins WebSocket rooms for all conversations the user is part of
 - **createGroupChat**: Creates a new group chat
+
 
 ## API Endpoints
 

@@ -12,6 +12,7 @@ import { signoutRouter } from "./routes/signout";
 import { sendFriendRequestRouter } from "./routes/send-friend-request";
 import { respondToFriendRequestRouter } from "./routes/respond-to-friend-request";
 import { removeFriendRouter } from "./routes/remove-friend";
+import { fetchOnlineFriendsRouter } from "./routes/fetch-online-friends";
 
 const app = express();
 
@@ -32,6 +33,7 @@ app.use(signoutRouter);
 app.use(sendFriendRequestRouter);
 app.use(respondToFriendRequestRouter);
 app.use(removeFriendRouter);
+app.use(fetchOnlineFriendsRouter);
 
 app.all("*", async (req, res, next) => {
   throw new NotFoundError();

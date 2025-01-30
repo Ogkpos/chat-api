@@ -9,6 +9,11 @@
   <body>
     <h1>Chat Test</h1>
 
+    <h2>Enter your User ID</h2>
+    <input type="text" id="senderInput" placeholder="Enter your User ID" />
+    <button onclick="setSenderId()">Set User ID</button>
+
+    <h2>Chat Type</h2>
     <label>
       <input type="radio" name="chatType" value="DIRECT" checked />Direct Chat
     </label>
@@ -22,7 +27,8 @@
       placeholder="Enter User ID or Group ID"
     />
 
-    <h2>Messages</h2>
+    <h2>Send a Message or File</h2>
+    <input type="file" id="fileInput" />
     <input type="text" id="messageInput" placeholder="Type a message..." />
     <button onclick="sendMessage()">Send</button>
 
@@ -37,31 +43,81 @@
     />
     <button onclick="createGroupChat()">Create Group</button>
 
+    <div>
+      <h2>online friends</h2>
+
+      <ul id="online-friends-list"></ul>
+    </div>
+
     <script>
-      const socket = io("http://localhost:3000"); // Connect to WebSocket server
+      let socket;
 
-      const senderId = "2506aa03-978b-4aa7-8c24-6bf6b0431e9c";
-      // const receiverId = "04d268fc-cccd-4c74-bb6d-b216a98ace07";
+      let senderId = "";
 
-      // Join all conversation of this user
-      socket.emit("joinConversations", senderId);
+      function setSenderId() {
+        senderId = document.getElementById("senderInput").value.trim();
+        if (!senderId) {
+          alert("Please enter a valid User ID.");
+          return;
+        }
+
+        alert(`User ID set: ${senderId}`);
+
+        socket = io("http://localhost:3000", {
+          query: {
+            userId: senderId,
+            origin: "http://127.0.0.1:3000",
+            methods: ["GET", "POST"],
+          },
+        });
+
+        // Listen to socket events
+        socket.on("newMessage", (message) => {
+          console.log("Received message:", message);
+          if (message.type === "GROUP") {
+            console.log("📢 Group Message Received:", message);
+          }
+
+          displayMessage(message);
+        });
+
+        socket.emit("joinConversations", senderId);
+      }
       document.querySelectorAll('input[name="chatType"]').forEach((radio) => {
         radio.addEventListener("change", function () {
           console.log("Chat type changed to:", this.value);
         });
       });
 
-      function sendMessage() {
-        const input = document.getElementById("messageInput");
-        const chatTarget = document.getElementById("chatTarget").value;
-        const message = input.value;
+      async function sendMessage() {
+        if (!senderId) {
+          alert("Please enter your User ID first.");
+          return;
+        }
+        const messageInput = document.getElementById("messageInput");
+
+        const chatTarget = document.getElementById("chatTarget").value.trim();
+        const message = messageInput.value.trim();
+        const fileInput = document.getElementById("fileInput").files[0];
         const chatType = document.querySelector(
           'input[name="chatType"]:checked'
         ).value;
 
         if (!chatTarget) {
-          alert("Please enter a User ID or Group ID.");
+          alert("Please enter a Receiver ID or Group ID.");
           return;
+        }
+
+        let fileData = null;
+
+        if (fileInput) {
+          // read file as base 64
+          fileData = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = (err) => reject(err);
+            reader.readAsDataURL(fileInput);
+          });
         }
 
         console.log("Sending message with:", {
@@ -69,15 +125,19 @@
           chatTarget,
           message,
           chatType,
+          fileData,
         });
-        // Differentiate between DIRECT and GROUP chat
+
         if (chatType === "DIRECT") {
           console.log("📢 Sending Direct Message...");
           socket.emit("sendMessage", {
             senderId,
-            receiverId: chatTarget, // This is the receiver's user ID
+            receiverId: chatTarget,
             content: message,
             type: "DIRECT",
+            file: fileData,
+            fileName: fileInput?.name || null,
+            fileType: fileInput?.type || null,
           });
         } else if (chatType === "GROUP") {
           console.log("📢 Sending Group Message...");
@@ -86,10 +146,13 @@
             conversationId: chatTarget, // This is the group ID
             content: message,
             type: "GROUP",
+            file: fileData, // base64-encoded file
+            fileName: fileInput?.name || null,
+            fileType: fileInput?.type || null,
           });
         }
 
-        input.value = "";
+        messageInput.value = "";
         console.log("Creating conversation with:", {
           senderId,
           chatTarget,
@@ -113,38 +176,20 @@
           return;
         }
 
-        socket.emit(
-          "createGroupChat",
-          {
-            creatorId: senderId,
-            name: groupName,
-            participantIds,
-          },
-          (response) => {
-            if (response.error) {
-              alert("Error: " + response.error);
-              return;
-            }
-            const groupId = response.conversationId;
-            currentGroupId = groupId;
-            alert(`Group "${groupName}" created! Group ID: ${groupId}`);
-          }
-        );
+        socket.emit("createGroupChat", {
+          creatorId: senderId,
+          name: groupName,
+          participantIds,
+        });
+        window.location.reload();
       }
-      // Listen for new messages
-      socket.on("newMessage", (message) => {
-        console.log("Received message:", message); // Debugging
-        if (!message.type) {
-          console.error("⚠️ Message type is missing!", message);
-        }
-        displayMessage(message);
-      });
 
       function displayMessage(message) {
         const list = document.getElementById("messages");
         const item = document.createElement("li");
 
         console.log("📩 Received message:", message);
+
         const senderName =
           message.sender?.username || message.senderId || "Unknown";
         const messageContent = message.content || "[No Content]";
@@ -155,6 +200,32 @@
           item.textContent = `👥 ${senderName} (Group Chat) ➝ ${messageContent}`;
         } else {
           item.textContent = `❓ ${senderName}: ${messageContent} (Unknown Type)`;
+        }
+
+        if (message.fileUrl) {
+          const fileElement = document.createElement("div");
+
+          if (message.fileType?.startsWith("image/")) {
+            const img = document.createElement("img");
+            img.src = message.fileUrl; // Full file URL
+            img.alt = message.fileName || "Uploaded Image";
+            img.style.maxWidth = "200px";
+            img.onerror = () => {
+              console.error("Image failed to load:", img.src);
+              img.alt = "Image not available";
+            };
+            fileElement.appendChild(img);
+          } else if (message.fileName) {
+            const link = document.createElement("a");
+            link.href = message.fileUrl; // Full file URL
+            link.download = message.fileName;
+            link.textContent = `Download ${message.fileName}`;
+            link.onerror = () =>
+              console.error("Download link failed for:", link.href);
+            fileElement.appendChild(link);
+          }
+
+          item.appendChild(fileElement);
         }
         list.appendChild(item);
       }
